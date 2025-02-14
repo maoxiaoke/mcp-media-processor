@@ -1,6 +1,6 @@
 {
   "name": "mcp-media-processor",
-  "version": "1.0.3",
+  "version": "1.0.7",
   "type": "module",
   "bin": {
     "mcp-sever-media-processor": "./build/index.js"
@@ -9,7 +9,6 @@
     "build"
   ],
   "scripts": {
-    "a": "mcp-sever-media-processor",
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\""
   },

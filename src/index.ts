@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -5,10 +7,7 @@ import ffmpeg from 'fluent-ffmpeg';
 import { homedir } from 'os';
 import { join, isAbsolute, resolve, dirname } from 'path';
 import { promises as fs } from 'fs';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-
-const execPromise = promisify(exec);
+import { execSync } from 'node:child_process';
 
 // Create server instance
 const server = new McpServer({
@@ -66,15 +65,30 @@ interface FFmpegError {
   message: string;
 }
 
-// Helper function to check if pngquant is installed
-async function checkPngquant() {
+// Helper function to check if ImageMagick is installed
+async function checkImageMagick() {
   try {
-    await execPromise('pngquant --version');
+    execSync('convert -version');
     return true;
   } catch (error) {
-    throw new Error('pngquant is not installed. Please install it first.');
+    throw new Error('ImageMagick is not installed. Please install it first.');
   }
 }
+
+// 创建一个 Promise 包装函数
+const execCommand = (command: string): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    try {
+      const output = execSync(command, {
+        encoding: 'utf-8',
+        stdio: 'pipe'
+      });
+      resolve(output);
+    } catch (error) {
+      reject(error);
+    }
+  });
+};
 
 // Register video processing tools
 server.tool(
@@ -91,29 +105,16 @@ server.tool(
       const absoluteInputPath = await getAbsolutePath(inputPath);
       const finalOutputPath = await getOutputPath(outputPath, outputFilename || 'output.mp4');
 
-      await new Promise((resolve, reject) => {
-        let command = ffmpeg(absoluteInputPath);
-        
-        // Add all options in pairs
-        for (let i = 0; i < options.length; i += 2) {
-          if (i + 1 < options.length) {
-            command = command.addOption(options[i], options[i + 1]);
-          }
+      let command = ffmpeg(absoluteInputPath);
+      
+      // Add all options in pairs
+      for (let i = 0; i < options.length; i += 2) {
+        if (i + 1 < options.length) {
+          command = command.addOption(options[i], options[i + 1]);
         }
+      }
 
-        command
-          .on('start', (commandLine) => {
-            console.error('Executing FFmpeg command:', commandLine);
-          })
-          .on('progress', (progress) => {
-            if (progress.percent) {
-              console.error('Processing: ' + Math.floor(progress.percent) + '% done');
-            }
-          })
-          .on('end', () => resolve(true))
-          .on('error', (err: FFmpegError) => reject(err))
-          .save(finalOutputPath);
-      });
+      const output = await execCommand(command.toString());
 
       return {
         content: [
@@ -153,13 +154,9 @@ server.tool(
       const defaultFilename = outputFilename || `${inputFileName}_converted.${outputFormat}`;
       const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
 
-      await new Promise((resolve, reject) => {
-        ffmpeg(absoluteInputPath)
-          .toFormat(outputFormat)
-          .on('end', () => resolve(true))
-          .on('error', (err: FFmpegError) => reject(err))
-          .save(finalOutputPath);
-      });
+      const command = ffmpeg(absoluteInputPath).toFormat(outputFormat).toString();
+
+      const output = await execCommand(command);
 
       return {
         content: [
@@ -199,14 +196,8 @@ server.tool(
       const defaultFilename = outputFilename || `${inputFileName}_compressed.mp4`;
       const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
 
-      await new Promise((resolve, reject) => {
-        ffmpeg(absoluteInputPath)
-          .videoCodec('libx264')
-          .addOption('-crf', quality.toString())
-          .on('end', () => resolve(true))
-          .on('error', (err: FFmpegError) => reject(err))
-          .save(finalOutputPath);
-      });
+      const command = ffmpeg(absoluteInputPath).videoCodec('libx264').addOption('-crf', quality.toString()).toString();
+      const output = await execCommand(command);
 
       return {
         content: [
@@ -247,14 +238,9 @@ server.tool(
       const defaultFilename = outputFilename || `${inputFileName}_trimmed.mp4`;
       const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
 
-      await new Promise((resolve, reject) => {
-        ffmpeg(absoluteInputPath)
-          .setStartTime(startTime)
-          .setDuration(duration)
-          .on('end', () => resolve(true))
-          .on('error', (err: FFmpegError) => reject(err))
-          .save(finalOutputPath);
-      });
+      const command = ffmpeg(absoluteInputPath).setStartTime(startTime).setDuration(duration).toString();
+
+      const output = await execCommand(command);
 
       return {
         content: [
@@ -280,7 +266,7 @@ server.tool(
 
 server.tool(
   "compress-image",
-  "Compress PNG image using pngquant",
+  "Compress PNG image using ImageMagick",
   {
     inputPath: z.string().describe("Absolute path to input PNG image"),
     quality: z.number().min(1).max(100).default(80).describe("Compression quality (1-100)"),
@@ -289,8 +275,8 @@ server.tool(
   },
   async ({ inputPath, quality, outputPath, outputFilename }) => {
     try {
-      // Check if pngquant is installed
-      await checkPngquant();
+      // Check if ImageMagick is installed
+      await checkImageMagick();
 
       const absoluteInputPath = await getAbsolutePath(inputPath);
       
@@ -303,13 +289,9 @@ server.tool(
       const defaultFilename = outputFilename || `${inputFileName}_compressed.png`;
       const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
 
-      // Convert quality (1-100) to pngquant quality (0-1)
-      const minQuality = Math.max(0, (quality - 5) / 100);
-      const maxQuality = Math.min(1, quality / 100);
-      
-      // Run pngquant command
-      const command = `pngquant --quality=${Math.round(minQuality * 100)}-${Math.round(maxQuality * 100)} --force --output "${finalOutputPath}" "${absoluteInputPath}"`;
-      await execPromise(command);
+      // Run ImageMagick convert command with quality setting
+      const command = `convert "${absoluteInputPath}" -quality ${quality} -define png:compression-level=9 "${finalOutputPath}"`;
+      const output = await execCommand(command);
 
       return {
         content: [
@@ -326,6 +308,264 @@ server.tool(
           {
             type: "text",
             text: `Error compressing image: ${errorMessage}`,
+          },
+        ],
+      };
+    }
+  }
+);
+
+server.tool(
+  "convert-image",
+  "Convert image to different format",
+  {
+    inputPath: z.string().describe("Absolute path to input image file"),
+    outputFormat: z.string().describe("Desired output format (e.g., jpg, png, webp, gif)"),
+    outputPath: z.string().optional().describe("Optional absolute path for output file. If not provided, file will be saved in Downloads folder"),
+    outputFilename: z.string().optional().describe("Output filename (only used if outputPath is not provided)")
+  },
+  async ({ inputPath, outputFormat, outputPath, outputFilename }) => {
+    try {
+      await checkImageMagick();
+      const absoluteInputPath = await getAbsolutePath(inputPath);
+      const inputFileName = absoluteInputPath.split('/').pop()?.split('.')[0] || 'output';
+      const defaultFilename = outputFilename || `${inputFileName}_converted.${outputFormat}`;
+      const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
+
+      const command = `convert "${absoluteInputPath}" "${finalOutputPath}"`;
+      await execCommand(command);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Image successfully converted and saved to: ${finalOutputPath}`,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error converting image: ${errorMessage}`,
+          },
+        ],
+      };
+    }
+  }
+);
+
+server.tool(
+  "resize-image",
+  "Resize image to specified dimensions",
+  {
+    inputPath: z.string().describe("Absolute path to input image file"),
+    width: z.number().optional().describe("Target width in pixels"),
+    height: z.number().optional().describe("Target height in pixels"),
+    maintainAspectRatio: z.boolean().default(true).describe("Whether to maintain aspect ratio when resizing"),
+    outputPath: z.string().optional().describe("Optional absolute path for output file. If not provided, file will be saved in Downloads folder"),
+    outputFilename: z.string().optional().describe("Output filename (only used if outputPath is not provided)")
+  },
+  async ({ inputPath, width, height, maintainAspectRatio, outputPath, outputFilename }) => {
+    try {
+      await checkImageMagick();
+      const absoluteInputPath = await getAbsolutePath(inputPath);
+      const inputFileName = absoluteInputPath.split('/').pop()?.split('.')[0] || 'output';
+      const extension = absoluteInputPath.split('.').pop() || 'png';
+      const defaultFilename = outputFilename || `${inputFileName}_resized.${extension}`;
+      const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
+
+      let dimensions = '';
+      if (width && height) {
+        dimensions = maintainAspectRatio ? `${width}x${height}` : `${width}x${height}!`;
+      } else if (width) {
+        dimensions = `${width}x`;
+      } else if (height) {
+        dimensions = `x${height}`;
+      } else {
+        throw new Error('Either width or height must be specified');
+      }
+
+      const command = `convert "${absoluteInputPath}" -resize "${dimensions}" "${finalOutputPath}"`;
+      await execCommand(command);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Image successfully resized and saved to: ${finalOutputPath}`,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error resizing image: ${errorMessage}`,
+          },
+        ],
+      };
+    }
+  }
+);
+
+server.tool(
+  "rotate-image",
+  "Rotate image by specified degrees",
+  {
+    inputPath: z.string().describe("Absolute path to input image file"),
+    degrees: z.number().describe("Rotation angle in degrees"),
+    outputPath: z.string().optional().describe("Optional absolute path for output file. If not provided, file will be saved in Downloads folder"),
+    outputFilename: z.string().optional().describe("Output filename (only used if outputPath is not provided)")
+  },
+  async ({ inputPath, degrees, outputPath, outputFilename }) => {
+    try {
+      await checkImageMagick();
+      const absoluteInputPath = await getAbsolutePath(inputPath);
+      const inputFileName = absoluteInputPath.split('/').pop()?.split('.')[0] || 'output';
+      const extension = absoluteInputPath.split('.').pop() || 'png';
+      const defaultFilename = outputFilename || `${inputFileName}_rotated.${extension}`;
+      const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
+
+      const command = `convert "${absoluteInputPath}" -rotate ${degrees} "${finalOutputPath}"`;
+      await execCommand(command);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Image successfully rotated and saved to: ${finalOutputPath}`,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error rotating image: ${errorMessage}`,
+          },
+        ],
+      };
+    }
+  }
+);
+
+server.tool(
+  "add-watermark",
+  "Add watermark to image",
+  {
+    inputPath: z.string().describe("Absolute path to input image file"),
+    watermarkPath: z.string().describe("Absolute path to watermark image file"),
+    position: z.enum(['northwest', 'north', 'northeast', 'west', 'center', 'east', 'southwest', 'south', 'southeast']).default('southeast').describe("Position of watermark"),
+    opacity: z.number().min(0).max(100).default(50).describe("Watermark opacity (0-100)"),
+    outputPath: z.string().optional().describe("Optional absolute path for output file. If not provided, file will be saved in Downloads folder"),
+    outputFilename: z.string().optional().describe("Output filename (only used if outputPath is not provided)")
+  },
+  async ({ inputPath, watermarkPath, position, opacity, outputPath, outputFilename }) => {
+    try {
+      await checkImageMagick();
+      const absoluteInputPath = await getAbsolutePath(inputPath);
+      const absoluteWatermarkPath = await getAbsolutePath(watermarkPath);
+      const inputFileName = absoluteInputPath.split('/').pop()?.split('.')[0] || 'output';
+      const extension = absoluteInputPath.split('.').pop() || 'png';
+      const defaultFilename = outputFilename || `${inputFileName}_watermarked.${extension}`;
+      const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
+
+      // Convert opacity from 0-100 to 0-1 for ImageMagick
+      const normalizedOpacity = opacity / 100;
+
+      const command = `convert "${absoluteInputPath}" \\( "${absoluteWatermarkPath}" -alpha set -channel A -evaluate multiply ${normalizedOpacity} \\) -gravity ${position} -composite "${finalOutputPath}"`;
+      await execCommand(command);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Watermark successfully added and saved to: ${finalOutputPath}`,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error adding watermark: ${errorMessage}`,
+          },
+        ],
+      };
+    }
+  }
+);
+
+server.tool(
+  "apply-effect",
+  "Apply visual effect to image",
+  {
+    inputPath: z.string().describe("Absolute path to input image file"),
+    effect: z.enum(['blur', 'sharpen', 'edge', 'emboss', 'grayscale', 'sepia', 'negate']).describe("Effect to apply"),
+    intensity: z.number().min(0).max(100).default(50).describe("Effect intensity (0-100, not applicable for some effects)"),
+    outputPath: z.string().optional().describe("Optional absolute path for output file. If not provided, file will be saved in Downloads folder"),
+    outputFilename: z.string().optional().describe("Output filename (only used if outputPath is not provided)")
+  },
+  async ({ inputPath, effect, intensity, outputPath, outputFilename }) => {
+    try {
+      await checkImageMagick();
+      const absoluteInputPath = await getAbsolutePath(inputPath);
+      const inputFileName = absoluteInputPath.split('/').pop()?.split('.')[0] || 'output';
+      const extension = absoluteInputPath.split('.').pop() || 'png';
+      const defaultFilename = outputFilename || `${inputFileName}_${effect}.${extension}`;
+      const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
+
+      let command = '';
+      switch (effect) {
+        case 'blur':
+          command = `convert "${absoluteInputPath}" -blur 0x${intensity / 5} "${finalOutputPath}"`;
+          break;
+        case 'sharpen':
+          command = `convert "${absoluteInputPath}" -sharpen 0x${intensity / 10} "${finalOutputPath}"`;
+          break;
+        case 'edge':
+          command = `convert "${absoluteInputPath}" -edge ${intensity / 10} "${finalOutputPath}"`;
+          break;
+        case 'emboss':
+          command = `convert "${absoluteInputPath}" -emboss ${intensity / 10} "${finalOutputPath}"`;
+          break;
+        case 'grayscale':
+          command = `convert "${absoluteInputPath}" -colorspace Gray "${finalOutputPath}"`;
+          break;
+        case 'sepia':
+          command = `convert "${absoluteInputPath}" -sepia-tone ${intensity}% "${finalOutputPath}"`;
+          break;
+        case 'negate':
+          command = `convert "${absoluteInputPath}" -negate "${finalOutputPath}"`;
+          break;
+      }
+
+      await execCommand(command);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Effect successfully applied and saved to: ${finalOutputPath}`,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error applying effect: ${errorMessage}`,
           },
         ],
       };

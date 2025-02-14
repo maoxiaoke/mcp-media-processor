@@ -24,6 +24,26 @@ Before using this server, make sure you have the following dependencies installe
   * Ubuntu/Debian: `sudo apt-get install imagemagick`
   * Windows: Download from [ImageMagick official website](https://imagemagick.org/script/download.php)
 
+## How to use
+
+Add this to your `claude_desktop_config.json`:
+
+### NPX
+
+```json
+{
+  "mcpServers": {
+    "mediaProcessor": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-media-processor@latest"
+      ]
+    }
+  }
+}
+```
+
 ## API
 
 ### Tools
@@ -118,25 +138,6 @@ Before using this server, make sure you have the following dependencies installe
     * `outputPath` (string, optional): Custom output path
     * `outputFilename` (string, optional): Custom output filename
 
-## Usage with Claude Desktop
-
-Add this to your `claude_desktop_config.json`:
-
-### NPX
-
-```json
-{
-  "mcpServers": {
-    "mediaProcessor": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "mcp-media-processor@latest"
-      ]
-    }
-  }
-}
-```
 
 ## License
 

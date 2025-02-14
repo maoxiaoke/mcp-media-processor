@@ -5,10 +5,14 @@ import ffmpeg from 'fluent-ffmpeg';
 import { homedir } from 'os';
 import { join, isAbsolute, resolve, dirname } from 'path';
 import { promises as fs } from 'fs';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execPromise = promisify(exec);
 
 // Create server instance
 const server = new McpServer({
-  name: "ffmpeg",
+  name: "media-processor",
   version: "1.0.0",
 });
 
@@ -60,6 +64,16 @@ async function getOutputPath(outputPath: string | undefined, defaultFilename: st
 
 interface FFmpegError {
   message: string;
+}
+
+// Helper function to check if pngquant is installed
+async function checkPngquant() {
+  try {
+    await execPromise('pngquant --version');
+    return true;
+  } catch (error) {
+    throw new Error('pngquant is not installed. Please install it first.');
+  }
 }
 
 // Register video processing tools
@@ -264,10 +278,65 @@ server.tool(
   }
 );
 
+server.tool(
+  "compress-image",
+  "Compress PNG image using pngquant",
+  {
+    inputPath: z.string().describe("Absolute path to input PNG image"),
+    quality: z.number().min(1).max(100).default(80).describe("Compression quality (1-100)"),
+    outputPath: z.string().optional().describe("Optional absolute path for output file. If not provided, file will be saved in Downloads folder"),
+    outputFilename: z.string().optional().describe("Output filename (only used if outputPath is not provided)")
+  },
+  async ({ inputPath, quality, outputPath, outputFilename }) => {
+    try {
+      // Check if pngquant is installed
+      await checkPngquant();
+
+      const absoluteInputPath = await getAbsolutePath(inputPath);
+      
+      // Verify input file is PNG
+      if (!absoluteInputPath.toLowerCase().endsWith('.png')) {
+        throw new Error('Input file must be a PNG image');
+      }
+
+      const inputFileName = absoluteInputPath.split('/').pop()?.split('.')[0] || 'output';
+      const defaultFilename = outputFilename || `${inputFileName}_compressed.png`;
+      const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
+
+      // Convert quality (1-100) to pngquant quality (0-1)
+      const minQuality = Math.max(0, (quality - 5) / 100);
+      const maxQuality = Math.min(1, quality / 100);
+      
+      // Run pngquant command
+      const command = `pngquant --quality=${Math.round(minQuality * 100)}-${Math.round(maxQuality * 100)} --force --output "${finalOutputPath}" "${absoluteInputPath}"`;
+      await execPromise(command);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Image successfully compressed and saved to: ${finalOutputPath}`,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error compressing image: ${errorMessage}`,
+          },
+        ],
+      };
+    }
+  }
+);
+
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("FFmpeg MCP Server running on stdio");
+  console.error("Media Processor MCP Server running on stdio");
 }
 
 main().catch((error) => {

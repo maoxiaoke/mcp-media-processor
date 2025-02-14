@@ -75,18 +75,13 @@ async function checkImageMagick() {
   }
 }
 
-// 创建一个 Promise 包装函数
-const execCommand = (command: string): Promise<string> => {
+// Helper function to execute FFmpeg command
+const executeFFmpeg = (command: any): Promise<void> => {
   return new Promise((resolve, reject) => {
-    try {
-      const output = execSync(command, {
-        encoding: 'utf-8',
-        stdio: 'pipe'
-      });
-      resolve(output);
-    } catch (error) {
-      reject(error);
-    }
+    command
+      .on('end', () => resolve())
+      .on('error', (err: Error) => reject(err))
+      .run();
   });
 };
 
@@ -114,7 +109,8 @@ server.tool(
         }
       }
 
-      const output = await execCommand(command.toString());
+      command.save(finalOutputPath);
+      await executeFFmpeg(command);
 
       return {
         content: [
@@ -154,9 +150,11 @@ server.tool(
       const defaultFilename = outputFilename || `${inputFileName}_converted.${outputFormat}`;
       const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
 
-      const command = ffmpeg(absoluteInputPath).toFormat(outputFormat).toString();
+      const command = ffmpeg(absoluteInputPath)
+        .toFormat(outputFormat)
+        .save(finalOutputPath);
 
-      const output = await execCommand(command);
+      await executeFFmpeg(command);
 
       return {
         content: [
@@ -196,8 +194,12 @@ server.tool(
       const defaultFilename = outputFilename || `${inputFileName}_compressed.mp4`;
       const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
 
-      const command = ffmpeg(absoluteInputPath).videoCodec('libx264').addOption('-crf', quality.toString()).toString();
-      const output = await execCommand(command);
+      const command = ffmpeg(absoluteInputPath)
+        .videoCodec('libx264')
+        .addOption('-crf', quality.toString())
+        .save(finalOutputPath);
+
+      await executeFFmpeg(command);
 
       return {
         content: [
@@ -238,9 +240,12 @@ server.tool(
       const defaultFilename = outputFilename || `${inputFileName}_trimmed.mp4`;
       const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
 
-      const command = ffmpeg(absoluteInputPath).setStartTime(startTime).setDuration(duration).toString();
+      const command = ffmpeg(absoluteInputPath)
+        .setStartTime(startTime)
+        .setDuration(duration)
+        .save(finalOutputPath);
 
-      const output = await execCommand(command);
+      await executeFFmpeg(command);
 
       return {
         content: [
@@ -291,7 +296,7 @@ server.tool(
 
       // Run ImageMagick convert command with quality setting
       const command = `convert "${absoluteInputPath}" -quality ${quality} -define png:compression-level=9 "${finalOutputPath}"`;
-      const output = await execCommand(command);
+      const output = await execSync(command);
 
       return {
         content: [
@@ -333,7 +338,7 @@ server.tool(
       const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
 
       const command = `convert "${absoluteInputPath}" "${finalOutputPath}"`;
-      await execCommand(command);
+      await execSync(command);
 
       return {
         content: [
@@ -389,7 +394,7 @@ server.tool(
       }
 
       const command = `convert "${absoluteInputPath}" -resize "${dimensions}" "${finalOutputPath}"`;
-      await execCommand(command);
+      await execSync(command);
 
       return {
         content: [
@@ -432,7 +437,7 @@ server.tool(
       const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
 
       const command = `convert "${absoluteInputPath}" -rotate ${degrees} "${finalOutputPath}"`;
-      await execCommand(command);
+      await execSync(command);
 
       return {
         content: [
@@ -481,7 +486,7 @@ server.tool(
       const normalizedOpacity = opacity / 100;
 
       const command = `convert "${absoluteInputPath}" \\( "${absoluteWatermarkPath}" -alpha set -channel A -evaluate multiply ${normalizedOpacity} \\) -gravity ${position} -composite "${finalOutputPath}"`;
-      await execCommand(command);
+      await execSync(command);
 
       return {
         content: [
@@ -549,7 +554,7 @@ server.tool(
           break;
       }
 
-      await execCommand(command);
+      await execSync(command);
 
       return {
         content: [

@@ -61,19 +61,13 @@ async function checkImageMagick() {
         throw new Error('ImageMagick is not installed. Please install it first.');
     }
 }
-// 创建一个 Promise 包装函数
-const execCommand = (command) => {
+// Helper function to execute FFmpeg command
+const executeFFmpeg = (command) => {
     return new Promise((resolve, reject) => {
-        try {
-            const output = execSync(command, {
-                encoding: 'utf-8',
-                stdio: 'pipe'
-            });
-            resolve(output);
-        }
-        catch (error) {
-            reject(error);
-        }
+        command
+            .on('end', () => resolve())
+            .on('error', (err) => reject(err))
+            .run();
     });
 };
 // Register video processing tools
@@ -93,7 +87,8 @@ server.tool("execute-ffmpeg", "Execute any FFmpeg command with custom options", 
                 command = command.addOption(options[i], options[i + 1]);
             }
         }
-        const output = await execCommand(command.toString());
+        command.save(finalOutputPath);
+        await executeFFmpeg(command);
         return {
             content: [
                 {
@@ -126,8 +121,10 @@ server.tool("convert-video", "Convert video to different format", {
         const inputFileName = absoluteInputPath.split('/').pop()?.split('.')[0] || 'output';
         const defaultFilename = outputFilename || `${inputFileName}_converted.${outputFormat}`;
         const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
-        const command = ffmpeg(absoluteInputPath).toFormat(outputFormat).toString();
-        const output = await execCommand(command);
+        const command = ffmpeg(absoluteInputPath)
+            .toFormat(outputFormat)
+            .save(finalOutputPath);
+        await executeFFmpeg(command);
         return {
             content: [
                 {
@@ -160,8 +157,11 @@ server.tool("compress-video", "Compress video file", {
         const inputFileName = absoluteInputPath.split('/').pop()?.split('.')[0] || 'output';
         const defaultFilename = outputFilename || `${inputFileName}_compressed.mp4`;
         const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
-        const command = ffmpeg(absoluteInputPath).videoCodec('libx264').addOption('-crf', quality.toString()).toString();
-        const output = await execCommand(command);
+        const command = ffmpeg(absoluteInputPath)
+            .videoCodec('libx264')
+            .addOption('-crf', quality.toString())
+            .save(finalOutputPath);
+        await executeFFmpeg(command);
         return {
             content: [
                 {
@@ -195,8 +195,11 @@ server.tool("trim-video", "Trim video to specified duration", {
         const inputFileName = absoluteInputPath.split('/').pop()?.split('.')[0] || 'output';
         const defaultFilename = outputFilename || `${inputFileName}_trimmed.mp4`;
         const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
-        const command = ffmpeg(absoluteInputPath).setStartTime(startTime).setDuration(duration).toString();
-        const output = await execCommand(command);
+        const command = ffmpeg(absoluteInputPath)
+            .setStartTime(startTime)
+            .setDuration(duration)
+            .save(finalOutputPath);
+        await executeFFmpeg(command);
         return {
             content: [
                 {
@@ -237,7 +240,7 @@ server.tool("compress-image", "Compress PNG image using ImageMagick", {
         const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
         // Run ImageMagick convert command with quality setting
         const command = `convert "${absoluteInputPath}" -quality ${quality} -define png:compression-level=9 "${finalOutputPath}"`;
-        const output = await execCommand(command);
+        const output = await execSync(command);
         return {
             content: [
                 {
@@ -272,7 +275,7 @@ server.tool("convert-image", "Convert image to different format", {
         const defaultFilename = outputFilename || `${inputFileName}_converted.${outputFormat}`;
         const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
         const command = `convert "${absoluteInputPath}" "${finalOutputPath}"`;
-        await execCommand(command);
+        await execSync(command);
         return {
             content: [
                 {
@@ -323,7 +326,7 @@ server.tool("resize-image", "Resize image to specified dimensions", {
             throw new Error('Either width or height must be specified');
         }
         const command = `convert "${absoluteInputPath}" -resize "${dimensions}" "${finalOutputPath}"`;
-        await execCommand(command);
+        await execSync(command);
         return {
             content: [
                 {
@@ -359,7 +362,7 @@ server.tool("rotate-image", "Rotate image by specified degrees", {
         const defaultFilename = outputFilename || `${inputFileName}_rotated.${extension}`;
         const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
         const command = `convert "${absoluteInputPath}" -rotate ${degrees} "${finalOutputPath}"`;
-        await execCommand(command);
+        await execSync(command);
         return {
             content: [
                 {
@@ -400,7 +403,7 @@ server.tool("add-watermark", "Add watermark to image", {
         // Convert opacity from 0-100 to 0-1 for ImageMagick
         const normalizedOpacity = opacity / 100;
         const command = `convert "${absoluteInputPath}" \\( "${absoluteWatermarkPath}" -alpha set -channel A -evaluate multiply ${normalizedOpacity} \\) -gravity ${position} -composite "${finalOutputPath}"`;
-        await execCommand(command);
+        await execSync(command);
         return {
             content: [
                 {
@@ -460,7 +463,7 @@ server.tool("apply-effect", "Apply visual effect to image", {
                 command = `convert "${absoluteInputPath}" -negate "${finalOutputPath}"`;
                 break;
         }
-        await execCommand(command);
+        await execSync(command);
         return {
             content: [
                 {

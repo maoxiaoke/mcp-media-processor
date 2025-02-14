@@ -1,6 +1,6 @@
 {
   "name": "mcp-media-processor",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "type": "module",
   "bin": {
     "mcp-sever-media-processor": "./build/index.js"

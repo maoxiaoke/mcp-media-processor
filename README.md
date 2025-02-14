@@ -1,5 +1,7 @@
 # MCP Media Processing Server
 
+[![smithery badge](https://smithery.ai/badge/@maoxiaoke/mcp-media-processor)](https://smithery.ai/server/@maoxiaoke/mcp-media-processor)
+
 A Node.js server implementing Model Context Protocol (MCP) for media processing operations, providing powerful video and image manipulation capabilities.
 
 ## Features

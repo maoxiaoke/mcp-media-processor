@@ -4,6 +4,8 @@
 
 A Node.js server implementing Model Context Protocol (MCP) for media processing operations, providing powerful video and image manipulation capabilities.
 
+<a href="https://glama.ai/mcp/servers/b1zqwbyrzm"><img width="380" height="200" src="https://glama.ai/mcp/servers/b1zqwbyrzm/badge" alt="Media Processing Server MCP server" /></a>
+
 ## Features
 
 * Video processing and conversion

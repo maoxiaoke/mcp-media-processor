@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/maoxiaoke-mcp-media-processor-badge.png)](https://mseep.ai/app/maoxiaoke-mcp-media-processor)
+
 # MCP Media Processing Server
 
 [![smithery badge](https://smithery.ai/badge/@maoxiaoke/mcp-media-processor)](https://smithery.ai/server/@maoxiaoke/mcp-media-processor)

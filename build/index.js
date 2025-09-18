@@ -3,7 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import ffmpeg from 'fluent-ffmpeg';
-import { homedir } from 'os';
+import { homedir, platform } from 'os';
 import { join, isAbsolute, resolve, dirname } from 'path';
 import { promises as fs } from 'fs';
 import { execSync } from 'node:child_process';
@@ -53,13 +53,18 @@ async function getOutputPath(outputPath, defaultFilename) {
 }
 // Helper function to check if ImageMagick is installed
 async function checkImageMagick() {
+    const binary = getImageMagickBinary();
     try {
-        execSync('convert -version');
+        execSync(`${binary} -version`);
         return true;
     }
     catch (error) {
         throw new Error('ImageMagick is not installed. Please install it first.');
     }
+}
+// Helper function to get the correct ImageMagick binary name
+function getImageMagickBinary() {
+    return platform() === 'win32' ? 'magick' : 'convert';
 }
 // Helper function to execute FFmpeg command
 const executeFFmpeg = (command) => {
@@ -239,7 +244,8 @@ server.tool("compress-image", "Compress PNG image using ImageMagick", {
         const defaultFilename = outputFilename || `${inputFileName}_compressed.png`;
         const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
         // Run ImageMagick convert command with quality setting
-        const command = `convert "${absoluteInputPath}" -quality ${quality} -define png:compression-level=9 "${finalOutputPath}"`;
+        const binary = getImageMagickBinary();
+        const command = `${binary} "${absoluteInputPath}" -quality ${quality} -define png:compression-level=9 "${finalOutputPath}"`;
         const output = await execSync(command);
         return {
             content: [
@@ -274,7 +280,8 @@ server.tool("convert-image", "Convert image to different format", {
         const inputFileName = absoluteInputPath.split('/').pop()?.split('.')[0] || 'output';
         const defaultFilename = outputFilename || `${inputFileName}_converted.${outputFormat}`;
         const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
-        const command = `convert "${absoluteInputPath}" "${finalOutputPath}"`;
+        const binary = getImageMagickBinary();
+        const command = `${binary} "${absoluteInputPath}" "${finalOutputPath}"`;
         await execSync(command);
         return {
             content: [
@@ -325,7 +332,8 @@ server.tool("resize-image", "Resize image to specified dimensions", {
         else {
             throw new Error('Either width or height must be specified');
         }
-        const command = `convert "${absoluteInputPath}" -resize "${dimensions}" "${finalOutputPath}"`;
+        const binary = getImageMagickBinary();
+        const command = `${binary} "${absoluteInputPath}" -resize "${dimensions}" "${finalOutputPath}"`;
         await execSync(command);
         return {
             content: [
@@ -361,7 +369,8 @@ server.tool("rotate-image", "Rotate image by specified degrees", {
         const extension = absoluteInputPath.split('.').pop() || 'png';
         const defaultFilename = outputFilename || `${inputFileName}_rotated.${extension}`;
         const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
-        const command = `convert "${absoluteInputPath}" -rotate ${degrees} "${finalOutputPath}"`;
+        const binary = getImageMagickBinary();
+        const command = `${binary} "${absoluteInputPath}" -rotate ${degrees} "${finalOutputPath}"`;
         await execSync(command);
         return {
             content: [
@@ -402,7 +411,8 @@ server.tool("add-watermark", "Add watermark to image", {
         const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
         // Convert opacity from 0-100 to 0-1 for ImageMagick
         const normalizedOpacity = opacity / 100;
-        const command = `convert "${absoluteInputPath}" \\( "${absoluteWatermarkPath}" -alpha set -channel A -evaluate multiply ${normalizedOpacity} \\) -gravity ${position} -composite "${finalOutputPath}"`;
+        const binary = getImageMagickBinary();
+        const command = `${binary} "${absoluteInputPath}" \\( "${absoluteWatermarkPath}" -alpha set -channel A -evaluate multiply ${normalizedOpacity} \\) -gravity ${position} -composite "${finalOutputPath}"`;
         await execSync(command);
         return {
             content: [
@@ -439,28 +449,29 @@ server.tool("apply-effect", "Apply visual effect to image", {
         const extension = absoluteInputPath.split('.').pop() || 'png';
         const defaultFilename = outputFilename || `${inputFileName}_${effect}.${extension}`;
         const finalOutputPath = await getOutputPath(outputPath, defaultFilename);
+        const binary = getImageMagickBinary();
         let command = '';
         switch (effect) {
             case 'blur':
-                command = `convert "${absoluteInputPath}" -blur 0x${intensity / 5} "${finalOutputPath}"`;
+                command = `${binary} "${absoluteInputPath}" -blur 0x${intensity / 5} "${finalOutputPath}"`;
                 break;
             case 'sharpen':
-                command = `convert "${absoluteInputPath}" -sharpen 0x${intensity / 10} "${finalOutputPath}"`;
+                command = `${binary} "${absoluteInputPath}" -sharpen 0x${intensity / 10} "${finalOutputPath}"`;
                 break;
             case 'edge':
-                command = `convert "${absoluteInputPath}" -edge ${intensity / 10} "${finalOutputPath}"`;
+                command = `${binary} "${absoluteInputPath}" -edge ${intensity / 10} "${finalOutputPath}"`;
                 break;
             case 'emboss':
-                command = `convert "${absoluteInputPath}" -emboss ${intensity / 10} "${finalOutputPath}"`;
+                command = `${binary} "${absoluteInputPath}" -emboss ${intensity / 10} "${finalOutputPath}"`;
                 break;
             case 'grayscale':
-                command = `convert "${absoluteInputPath}" -colorspace Gray "${finalOutputPath}"`;
+                command = `${binary} "${absoluteInputPath}" -colorspace Gray "${finalOutputPath}"`;
                 break;
             case 'sepia':
-                command = `convert "${absoluteInputPath}" -sepia-tone ${intensity}% "${finalOutputPath}"`;
+                command = `${binary} "${absoluteInputPath}" -sepia-tone ${intensity}% "${finalOutputPath}"`;
                 break;
             case 'negate':
-                command = `convert "${absoluteInputPath}" -negate "${finalOutputPath}"`;
+                command = `${binary} "${absoluteInputPath}" -negate "${finalOutputPath}"`;
                 break;
         }
         await execSync(command);
